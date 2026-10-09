@@ -125,7 +125,13 @@ if job:
         except requests.RequestException as exc:
             st.error(f"Could not refresh job status: {exc}")
 
-    for result in job["results"]:
+    visible_results = job["results"][:25]
+    if len(job["results"]) > len(visible_results):
+        st.info(
+            f"Showing the first {len(visible_results)} of {len(job['results'])} results. "
+            "Use candidate search below to find and download a specific certificate."
+        )
+    for result in visible_results:
         with st.container(border=True):
             left, right = st.columns([3, 2])
             left.markdown(
