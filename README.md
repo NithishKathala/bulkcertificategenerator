@@ -44,7 +44,7 @@ Keep the API running in one PowerShell window. In a second window, from the proj
 streamlit run streamlit_app.py
 ```
 
-Open the local URL printed by Streamlit (usually `http://localhost:8501`). The page lets you enter a course, date, and recipients, submit a generation job, inspect the outcomes, download successful PDFs, and look up a job by ID. The API URL can be changed in the sidebar.
+Open the local URL printed by Streamlit (usually `http://localhost:8501`). The page lets you enter a course, date, and recipients, submit a generation job, inspect the outcomes, download successful PDFs, look up a job by ID, and search candidate/certificate records. Search results are paginated. The API URL can be changed in the sidebar.
 
 ## API
 
@@ -78,6 +78,16 @@ The response includes the job ID, pass mark, counts for passed/not-passed candid
 
 `GET /api/jobs/{job_id}` returns the job summary and its recipient results. Status is `COMPLETED` if all certificates succeeded, or `COMPLETED_WITH_ERRORS` if one or more failed. Processing is synchronous in this version, so the POST response is the completed result; the status endpoint remains available for later lookup.
 
+### Search candidate and certificate records
+
+`GET /api/certificates/search` returns paginated results. Use `q` to search candidate names, emails, or course names; `course` to narrow by course; `passed=true|false` to filter assessment outcomes; `status=SUCCESS|NOT_PASSED|FAILED` to filter certificate outcomes; and `score_min`/`score_max` to filter scores. `offset` and `limit` control pagination (maximum limit is 200). For example:
+
+```text
+GET /api/certificates/search?q=asha&passed=true&score_min=60&limit=25
+```
+
+Each result includes candidate, course, score, assessment outcome, certificate status, and an individual download URL when a certificate exists.
+
 ### Retrieve a certificate
 
 `GET /api/certificates/{certificate_id}/download` returns the PDF for a successful result. A missing ID returns `404`; a known result without a generated certificate (not passed or generation failed) returns `409`.
@@ -93,6 +103,7 @@ The response includes the job ID, pass mark, counts for passed/not-passed candid
 - `app/certificates.py` renders the fixed landscape PDF using ReportLab.
 - Generated PDFs are stored under `generated/{job_id}/`; set `CERTIFICATE_OUTPUT_DIR` to change the storage directory.
 - Candidate eligibility is determined by `score_percent >= pass_mark`; both values are percentages from 0 to 100. The supplied candidate score is trusted input and is not independently verified against an exam system.
+- Search uses the relational candidate/job records and returns bounded pages instead of loading every certificate into the UI at once.
 - Synchronous processing keeps the deadline-sized implementation simple and easy to run. A background queue such as Celery or RQ would be a suitable next step for larger batches or long-running rendering.
 - SQLite keeps local setup simple; `DATABASE_URL` supports configuring another SQLAlchemy-compatible relational database.
 
@@ -102,7 +113,7 @@ The response includes the job ID, pass mark, counts for passed/not-passed candid
 pytest
 ```
 
-The tests use an isolated in-memory SQLite database and temporary PDF directory. They cover job creation, request validation, PDF generation, job status, individual generation failure, eligibility decisions, individual and ZIP downloads, and not-found behavior.
+The tests use an isolated in-memory SQLite database and temporary PDF directory. They cover job creation, request validation, PDF generation, job status, individual generation failure, eligibility decisions, individual and ZIP downloads, not-found behavior, search filters, and pagination.
 
 ## Learning and future scope
 

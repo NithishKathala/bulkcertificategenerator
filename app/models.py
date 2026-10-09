@@ -12,7 +12,7 @@ class GenerationJob(Base):
     __tablename__ = "generation_jobs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    course_name: Mapped[str] = mapped_column(String(200))
+    course_name: Mapped[str] = mapped_column(String(200), index=True)
     completion_date: Mapped[str] = mapped_column(String(32))
     status: Mapped[str] = mapped_column(String(20), default="PROCESSING")
     total: Mapped[int] = mapped_column(Integer)
@@ -31,8 +31,8 @@ class CertificateResult(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     job_id: Mapped[str] = mapped_column(ForeignKey("generation_jobs.id", ondelete="CASCADE"), index=True)
     position: Mapped[int] = mapped_column(Integer)
-    recipient_name: Mapped[str] = mapped_column(String(200))
-    recipient_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    recipient_name: Mapped[str] = mapped_column(String(200), index=True)
+    recipient_email: Mapped[str | None] = mapped_column(String(320), nullable=True, index=True)
     score_percent: Mapped[float] = mapped_column(Float, default=100.0)
     status: Mapped[str] = mapped_column(String(20))
     filename: Mapped[str | None] = mapped_column(String(255), nullable=True)

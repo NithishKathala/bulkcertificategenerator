@@ -169,3 +169,97 @@ if st.button("Fetch job"):
             st.error(f"API returned {response.status_code}: {response.text}")
         except requests.RequestException as exc:
             st.error(f"Could not reach the API: {exc}")
+
+st.divider()
+st.subheader("Search candidates and certificates")
+with st.form("certificate_search"):
+    search_col1, search_col2 = st.columns(2)
+    search_text = search_col1.text_input("Name, email, or course contains")
+    search_course = search_col2.text_input("Course filter")
+    filter_col1, filter_col2, filter_col3 = st.columns(3)
+    assessment_filter = filter_col1.selectbox("Assessment result", ["Any", "Passed", "Not passed"])
+    certificate_filter = filter_col2.selectbox(
+        "Certificate status", ["Any", "Generated", "Not passed", "Generation failed"]
+    )
+    page_size = filter_col3.selectbox("Results per page", [25, 50, 100, 200], index=1)
+    score_col1, score_col2 = st.columns(2)
+    minimum_score = score_col1.number_input("Minimum score (optional)", min_value=0.0, max_value=100.0, value=0.0)
+    maximum_score = score_col2.number_input("Maximum score (optional)", min_value=0.0, max_value=100.0, value=100.0)
+    search_submitted = st.form_submit_button("Search", type="primary")
+
+
+def load_search_page(params: dict, offset: int) -> None:
+    response = requests.get(
+        f"{api_base}/api/certificates/search",
+        params={**params, "offset": offset, "limit": params["limit"]},
+        timeout=30,
+    )
+    response.raise_for_status()
+    st.session_state["certificate_search_results"] = response.json()
+
+
+if search_submitted:
+    search_params = {"limit": page_size}
+    if search_text.strip():
+        search_params["q"] = search_text.strip()
+    if search_course.strip():
+        search_params["course"] = search_course.strip()
+    if assessment_filter != "Any":
+        search_params["passed"] = assessment_filter == "Passed"
+    if certificate_filter != "Any":
+        search_params["status"] = {
+            "Generated": "SUCCESS",
+            "Not passed": "NOT_PASSED",
+            "Generation failed": "FAILED",
+        }[certificate_filter]
+    if minimum_score > 0:
+        search_params["score_min"] = minimum_score
+    if maximum_score < 100:
+        search_params["score_max"] = maximum_score
+    st.session_state["certificate_search_params"] = search_params
+    st.session_state["certificate_search_offset"] = 0
+    try:
+        load_search_page(search_params, 0)
+    except requests.RequestException as exc:
+        st.error(f"Search failed: {exc}")
+
+
+search_page = st.session_state.get("certificate_search_results")
+if search_page:
+    st.caption(f"Found {search_page['total']} matching candidates. Showing {len(search_page['results'])} on this page.")
+    for item in search_page["results"]:
+        with st.container(border=True):
+            result_col, action_col = st.columns([4, 2])
+            result_col.markdown(
+                f"**{item['recipient_name']}** — {item['course_name']} — {item['score_percent']:g}% — "
+                f"{'Passed' if item['passed'] else 'Not passed'} — {item['status']}"
+            )
+            result_col.caption(
+                f"Email: {item.get('recipient_email') or 'not provided'} | "
+                f"Completion date: {item['completion_date']} | Job: {item['job_id']}"
+            )
+            if item.get("download_url"):
+                action_col.link_button("Download certificate", f"{api_base}{item['download_url']}")
+
+    page_col1, page_col2, page_col3 = st.columns([1, 2, 1])
+    offset = st.session_state.get("certificate_search_offset", 0)
+    limit = search_page["limit"]
+    if page_col1.button("Previous", disabled=offset == 0, key="search_previous"):
+        new_offset = max(0, offset - limit)
+        try:
+            load_search_page(st.session_state["certificate_search_params"], new_offset)
+            st.session_state["certificate_search_offset"] = new_offset
+            st.rerun()
+        except requests.RequestException as exc:
+            st.error(f"Could not load the previous page: {exc}")
+    page_col2.caption(f"Showing results {offset + 1}–{min(offset + len(search_page['results']), search_page['total'])}")
+    if page_col3.button(
+        "Next", disabled=offset + limit >= search_page["total"], key="search_next"
+    ):
+        new_offset = offset + limit
+        try:
+            load_search_page(st.session_state["certificate_search_params"], new_offset)
+            st.session_state["certificate_search_offset"] = new_offset
+            st.rerun()
+        except requests.RequestException as exc:
+            st.error(f"Could not load the next page: {exc}")

@@ -45,3 +45,6 @@ def initialize_database() -> None:
             existing = {item["name"] for item in inspector.get_columns(table)}
             if column not in existing:
                 connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {definition}"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_generation_jobs_course_name ON generation_jobs (course_name)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_certificate_results_recipient_name ON certificate_results (recipient_name)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_certificate_results_recipient_email ON certificate_results (recipient_email)"))

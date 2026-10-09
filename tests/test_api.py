@@ -158,3 +158,43 @@ def test_zip_for_job_without_passed_candidates_returns_conflict(client):
     job = client.post("/api/jobs/", json=data).json()
     response = client.get(f"/api/jobs/{job['id']}/certificates.zip")
     assert response.status_code == 409
+
+
+def test_search_by_candidate_name_and_course(client):
+    created = client.post("/api/jobs/", json=payload()).json()
+    response = client.get("/api/certificates/search", params={"q": "asha", "course": "Python"})
+    assert response.status_code == 200
+    page = response.json()
+    assert page["total"] == 1
+    assert page["results"][0]["recipient_name"] == "Asha Rao"
+    assert page["results"][0]["job_id"] == created["id"]
+    assert page["results"][0]["download_url"].endswith("/download")
+
+
+def test_search_filters_not_passed_candidates(client):
+    data = payload()
+    data["recipients"][1]["score_percent"] = 40
+    client.post("/api/jobs/", json=data)
+    response = client.get(
+        "/api/certificates/search", params={"passed": "false", "status": "NOT_PASSED"}
+    )
+    assert response.status_code == 200
+    page = response.json()
+    assert page["total"] == 1
+    assert page["results"][0]["recipient_name"] == "Ravi Kumar"
+    assert page["results"][0]["passed"] is False
+
+
+def test_search_paginates_results(client):
+    client.post("/api/jobs/", json=payload())
+    first_page = client.get("/api/certificates/search", params={"limit": 1, "offset": 0}).json()
+    second_page = client.get("/api/certificates/search", params={"limit": 1, "offset": 1}).json()
+    assert first_page["total"] == 2
+    assert len(first_page["results"]) == 1
+    assert len(second_page["results"]) == 1
+    assert first_page["results"][0]["certificate_id"] != second_page["results"][0]["certificate_id"]
+
+
+def test_search_rejects_reversed_score_range(client):
+    response = client.get("/api/certificates/search", params={"score_min": 80, "score_max": 20})
+    assert response.status_code == 422

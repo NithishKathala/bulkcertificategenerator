@@ -61,3 +61,24 @@ class JobOut(BaseModel):
     failed: int
     created_at: datetime
     results: list[CertificateResultOut]
+
+
+class CertificateSearchItem(BaseModel):
+    certificate_id: str
+    job_id: str
+    course_name: str
+    completion_date: date
+    recipient_name: str
+    recipient_email: str | None
+    score_percent: float
+    pass_mark: float
+    passed: bool
+    status: Literal["SUCCESS", "NOT_PASSED", "FAILED"]
+    download_url: str | None
+
+
+class CertificateSearchPage(BaseModel):
+    total: int
+    offset: int
+    limit: int
+    results: list[CertificateSearchItem]
