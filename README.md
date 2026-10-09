@@ -33,6 +33,17 @@ uvicorn app.main:app --reload
 
 The service is available at `http://127.0.0.1:8000`. Interactive API documentation is at `http://127.0.0.1:8000/docs`; the health check is `GET /health`.
 
+## Run the Streamlit testing UI
+
+Keep the API running in one PowerShell window. In a second window, from the project folder run:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+streamlit run streamlit_app.py
+```
+
+Open the local URL printed by Streamlit (usually `http://localhost:8501`). The page lets you enter a course, date, and recipients, submit a generation job, inspect the outcomes, download successful PDFs, and look up a job by ID. The API URL can be changed in the sidebar.
+
 ## API
 
 ### Submit a bulk generation request
