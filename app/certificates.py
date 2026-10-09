@@ -15,7 +15,8 @@ def output_directory() -> Path:
 
 
 def generate_certificate(
-    *, recipient_name: str, course_name: str, completion_date: str, job_id: str, certificate_id: str
+    *, recipient_name: str, course_name: str, completion_date: str, score_percent: float,
+    pass_mark: float, job_id: str, certificate_id: str
 ) -> Path:
     """Create one certificate PDF and return its path."""
     path = output_directory() / job_id / f"{certificate_id}.pdf"
@@ -40,6 +41,9 @@ def generate_certificate(
     pdf.setFillColor(colors.HexColor("#333333"))
     pdf.setFont("Helvetica", 16)
     pdf.drawCentredString(page_width / 2, page_height - 295, f"for successfully completing {course_name[:100]}")
+    pdf.setFillColor(colors.HexColor("#1B4965"))
+    pdf.setFont("Helvetica-Bold", 14)
+    pdf.drawCentredString(page_width / 2, page_height - 335, f"Assessment score: {score_percent:g}%  |  Pass mark: {pass_mark:g}%")
     pdf.setFont("Helvetica", 12)
     pdf.drawCentredString(page_width / 2, 110, f"Completion date: {completion_date}")
     pdf.setStrokeColor(colors.HexColor("#777777"))

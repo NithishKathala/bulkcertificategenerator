@@ -19,11 +19,12 @@ st.subheader("Create a generation job")
 with st.form("create_job"):
     course_name = st.text_input("Course or event name", value="Python Fundamentals")
     completion_date = st.date_input("Completion date", value=date.today())
+    pass_mark = st.number_input("Pass mark (%)", min_value=0.0, max_value=100.0, value=60.0, step=1.0)
     recipients_text = st.text_area(
-        "Recipients (one per line: name,email)",
-        value="Asha Rao,asha@example.com\nRavi Kumar,ravi@example.com",
+        "Candidates (one per line: name,email,score_percent)",
+        value="Asha Rao,asha@example.com,85\nRavi Kumar,ravi@example.com,52",
         height=140,
-        help="Email is optional. If a name contains a comma, quote the name using CSV quotes.",
+        help="Email is optional, but keep the comma before the score. Quote names that contain commas.",
     )
     submit = st.form_submit_button("Generate certificates", type="primary")
 
@@ -33,15 +34,22 @@ def parse_recipients(raw_text: str) -> list[dict[str, str]]:
     for line_number, row in enumerate(csv.reader(io.StringIO(raw_text)), start=1):
         if not row or not any(cell.strip() for cell in row):
             continue
-        if len(row) > 2:
-            raise ValueError(f"Line {line_number}: use name,email (quote names that contain commas).")
+        if len(row) != 3:
+            raise ValueError(f"Line {line_number}: use name,email,score_percent.")
         name = row[0].strip()
-        email = row[1].strip() if len(row) == 2 else ""
+        email = row[1].strip()
         if not name:
             raise ValueError(f"Line {line_number}: recipient name is required.")
+        try:
+            score_percent = float(row[2].strip())
+        except ValueError as exc:
+            raise ValueError(f"Line {line_number}: score must be a number from 0 to 100.") from exc
+        if not 0 <= score_percent <= 100:
+            raise ValueError(f"Line {line_number}: score must be between 0 and 100.")
         recipient = {"name": name}
         if email:
             recipient["email"] = email
+        recipient["score_percent"] = score_percent
         recipients.append(recipient)
     if not recipients:
         raise ValueError("Enter at least one recipient.")
@@ -56,6 +64,7 @@ if submit:
             json={
                 "course_name": course_name,
                 "completion_date": completion_date.isoformat(),
+                "pass_mark": pass_mark,
                 "recipients": recipients,
             },
             timeout=120,
@@ -79,12 +88,32 @@ job = st.session_state.get("last_job")
 if job:
     st.divider()
     st.subheader("Latest job results")
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
     col1.metric("Job status", job["status"])
     col2.metric("Recipients", job["total"])
-    col3.metric("Succeeded", job["succeeded"])
-    col4.metric("Failed", job["failed"])
+    col3.metric("Passed", job["passed"])
+    col4.metric("Not passed", job["not_passed"])
+    col5.metric("Certificates", job["succeeded"])
+    col6.metric("Generation errors", job["failed"])
     st.code(job["id"], language=None)
+
+    if job["succeeded"]:
+        zip_key = f"certificates_zip_{job['id']}"
+        if st.button("Prepare ZIP of passed-candidate certificates", key=f"prepare-{job['id']}"):
+            try:
+                zip_response = requests.get(f"{api_base}/api/jobs/{job['id']}/certificates.zip", timeout=60)
+                zip_response.raise_for_status()
+                st.session_state[zip_key] = zip_response.content
+            except requests.RequestException as exc:
+                st.error(f"Could not prepare certificate ZIP: {exc}")
+        if zip_key in st.session_state:
+            st.download_button(
+                "Download passed-candidate certificates (.zip)",
+                data=st.session_state[zip_key],
+                file_name=f"certificates-{job['id']}.zip",
+                mime="application/zip",
+                key=f"download-zip-{job['id']}",
+            )
 
     refresh = st.button("Refresh job status")
     if refresh:
@@ -99,7 +128,10 @@ if job:
     for result in job["results"]:
         with st.container(border=True):
             left, right = st.columns([3, 2])
-            left.markdown(f"**{result['recipient_name']}** — {result['status']}")
+            left.markdown(
+                f"**{result['recipient_name']}** — {result['status']} "
+                f"(score {result['score_percent']:g}%; pass mark {job['pass_mark']:g}%)"
+            )
             if result.get("recipient_email"):
                 left.caption(result["recipient_email"])
             if result["status"] == "SUCCESS":
@@ -117,6 +149,8 @@ if job:
                     )
                 except requests.RequestException as exc:
                     right.error(f"Download unavailable: {exc}")
+            elif result["status"] == "NOT_PASSED":
+                left.warning(result.get("error") or "Candidate did not meet the pass mark.")
             elif result.get("error"):
                 left.error(result["error"])
 

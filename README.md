@@ -8,7 +8,9 @@ A Python API that accepts one request for many recipients, creates a personalize
 - Request validation and a maximum batch size of 1,000 recipients.
 - A relational record for each job and each recipient result.
 - Per-recipient failure isolation and job success/failure counts.
-- Job status and individual PDF download endpoints.
+- Candidate score tracking with a configurable pass mark (60% by default).
+- Certificates are generated only for candidates who meet the pass mark.
+- Individual PDF downloads and a ZIP containing only successful certificates.
 - Automated tests for validation, generation, status, failure isolation, and retrieval.
 
 ## Requirements and setup
@@ -48,15 +50,16 @@ Open the local URL printed by Streamlit (usually `http://localhost:8501`). The p
 
 ### Submit a bulk generation request
 
-`POST /api/jobs/`
+`POST /api/jobs/`. Set `pass_mark` from 0 to 100 (default 60). Every candidate must include `score_percent` from 0 to 100. A candidate below the pass mark is recorded as `NOT_PASSED` and receives no certificate.
 
 ```json
 {
   "course_name": "Python Fundamentals",
   "completion_date": "2026-10-09",
+  "pass_mark": 60,
   "recipients": [
-    {"name": "Asha Rao", "email": "asha@example.com"},
-    {"name": "Ravi Kumar", "email": "ravi@example.com"}
+    {"name": "Asha Rao", "email": "asha@example.com", "score_percent": 85},
+    {"name": "Ravi Kumar", "email": "ravi@example.com", "score_percent": 52}
   ]
 }
 ```
@@ -66,10 +69,10 @@ Example with curl:
 ```bash
 curl -X POST http://127.0.0.1:8000/api/jobs/ \
   -H "Content-Type: application/json" \
-  -d '{"course_name":"Python Fundamentals","completion_date":"2026-10-09","recipients":[{"name":"Asha Rao","email":"asha@example.com"}]}'
+  -d '{"course_name":"Python Fundamentals","completion_date":"2026-10-09","pass_mark":60,"recipients":[{"name":"Asha Rao","email":"asha@example.com","score_percent":85}]}'
 ```
 
-The response includes the job ID, counts, and each recipient outcome. Successful results include a `download_url`; failed results include a safe error message.
+The response includes the job ID, pass mark, counts for passed/not-passed candidates and generated/failed certificates, plus each recipient's score and outcome. Candidates who pass receive a certificate showing their score and the pass mark. Successful results include a `download_url`; candidates who do not pass have status `NOT_PASSED` and no download URL.
 
 ### Check job status and results
 
@@ -77,7 +80,11 @@ The response includes the job ID, counts, and each recipient outcome. Successful
 
 ### Retrieve a certificate
 
-`GET /api/certificates/{certificate_id}/download` returns the PDF for a successful result. A missing ID returns `404`; a known failed result returns `409`.
+`GET /api/certificates/{certificate_id}/download` returns the PDF for a successful result. A missing ID returns `404`; a known result without a generated certificate (not passed or generation failed) returns `409`.
+
+### Download all successful certificates
+
+`GET /api/jobs/{job_id}/certificates.zip` returns a ZIP archive containing certificates for candidates who passed and whose PDF generation succeeded. Candidates who did not pass and generation failures are excluded. A job with no downloadable certificates returns `409`.
 
 ## Architecture and design decisions
 
@@ -85,6 +92,7 @@ The response includes the job ID, counts, and each recipient outcome. Successful
 - `app/models.py` stores generation jobs and ordered recipient outcomes in relational tables.
 - `app/certificates.py` renders the fixed landscape PDF using ReportLab.
 - Generated PDFs are stored under `generated/{job_id}/`; set `CERTIFICATE_OUTPUT_DIR` to change the storage directory.
+- Candidate eligibility is determined by `score_percent >= pass_mark`; both values are percentages from 0 to 100. The supplied candidate score is trusted input and is not independently verified against an exam system.
 - Synchronous processing keeps the deadline-sized implementation simple and easy to run. A background queue such as Celery or RQ would be a suitable next step for larger batches or long-running rendering.
 - SQLite keeps local setup simple; `DATABASE_URL` supports configuring another SQLAlchemy-compatible relational database.
 
@@ -94,8 +102,8 @@ The response includes the job ID, counts, and each recipient outcome. Successful
 pytest
 ```
 
-The tests use an isolated in-memory SQLite database and temporary PDF directory. They cover job creation, request validation, PDF generation, job status, individual generation failure, download retrieval, and not-found behavior.
+The tests use an isolated in-memory SQLite database and temporary PDF directory. They cover job creation, request validation, PDF generation, job status, individual generation failure, eligibility decisions, individual and ZIP downloads, and not-found behavior.
 
 ## Learning and future scope
 
-This project demonstrates request validation, REST API design, relational persistence, PDF generation, and resilient batch processing. Future improvements could add background workers, authentication, configurable certificate templates, cloud object storage, job cancellation, and audit logging.
+This project demonstrates request validation, REST API design, relational persistence, PDF generation, assessment eligibility rules, and resilient batch processing. Future improvements could add background workers, authentication, configurable certificate templates, cloud object storage, job cancellation, integration with a verified assessment system, and audit logging.
