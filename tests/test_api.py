@@ -187,6 +187,33 @@ def test_input_validation_rejects_empty_recipient_list(client):
     assert response.status_code == 422
 
 
+def test_input_validation_rejects_malformed_email(client):
+    invalid = payload()
+    invalid["recipients"][0]["email"] = "not-an-email"
+
+    response = client.post("/api/jobs/", json=invalid)
+
+    assert response.status_code == 422
+
+
+def test_api_accepts_maximum_batch_and_rejects_one_over(client, monkeypatch):
+    # Keep this boundary test focused on request validation, not PDF throughput.
+    monkeypatch.setattr(routes, "process_generation_job", lambda job_id: None)
+    data = {
+        "course_name": "Python Fundamentals",
+        "completion_date": "2026-10-09",
+        "recipients": [{"name": f"Candidate {index}"} for index in range(1000)],
+    }
+
+    accepted = client.post("/api/jobs/", json=data)
+    assert accepted.status_code == 202
+    assert accepted.json()["total"] == 1000
+
+    data["recipients"].append({"name": "Candidate 1000"})
+    rejected = client.post("/api/jobs/", json=data)
+    assert rejected.status_code == 422
+
+
 def test_input_validation_rejects_duplicate_recipient_emails(client):
     data = payload()
     data["recipients"][1]["email"] = "ASHA@example.com"
