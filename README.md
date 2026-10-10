@@ -64,6 +64,21 @@ streamlit run streamlit_app.py
 
 Open the local URL printed by Streamlit (usually `http://localhost:8501`). The page lets you enter a course and date, paste recipient rows or upload a CSV, choose whether certificates require a passing score, submit a generation job, watch its progress, cancel active work, inspect audit history, download successful PDFs, look up a job by ID, and search candidate/certificate records. Pass-mark gating is off by default. Search results are paginated. The API URL can be changed in the sidebar or supplied through the `CERTIFICATE_API_BASE_URL` environment variable when starting Streamlit.
 
+The API and Streamlit UI use different ports. The defaults are API `8000` and UI `8501`. If those ports are unavailable, choose custom ports and point Streamlit at the API. For example, on Windows PowerShell, run the API in one window:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8013
+```
+
+Then run Streamlit in a second window:
+
+```powershell
+$env:CERTIFICATE_API_BASE_URL = "http://127.0.0.1:8013"
+.\.venv\Scripts\python.exe -m streamlit run streamlit_app.py --server.address 127.0.0.1 --server.port 8515
+```
+
+In this example, the API documentation is at `http://127.0.0.1:8013/docs` and the Streamlit UI is at `http://127.0.0.1:8515`.
+
 CSV uploads are checked for malformed rows, invalid email addresses, duplicate email addresses, and batch-size limits before generation starts. A downloadable CSV template is provided in the UI. Use these columns in this order (the header row is optional):
 
 ```csv
